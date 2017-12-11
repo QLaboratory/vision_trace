@@ -69,6 +69,8 @@ struct Car_Data
 {
 	std::string car_id_;
 	std::vector<int> car_statuses_id_;
+	double active_time_start_;
+	double active_time_end_;
 };
 //divide the color by car_id_
 bool get_Each_Car_Data(const std::vector<Trace_Data> &trace_data,std::vector<Car_Data> &car_data)
@@ -80,7 +82,7 @@ bool get_Each_Car_Data(const std::vector<Trace_Data> &trace_data,std::vector<Car
 		car_id_set.insert(trace_data[i].car_id_);
 	}
 
-	std::cout<<car_id_set.size()<<std::endl;
+	//std::cout<<car_id_set.size()<<std::endl;
 	// for(std::set<std::string>::iterator iter = car_id_set.begin();iter!=car_id_set.end();iter++)
 	// {
 	// 	std::cout<<*iter<<std::endl;
@@ -217,7 +219,7 @@ bool draw_Car_Trace(const std::vector<Trace_Data> &trace_data, std::vector<Car_D
 }
 
 //draw lots of car together
-bool draw_Cars_Trace(const std::vector<Trace_Data> &trace_data, std::vector<Car_Data> &car_data,std::vector<int> car_ids)
+bool draw_Cars_Trace(const std::vector<Trace_Data> &trace_data,const std::vector<Car_Data> &car_data,const std::vector<int> &car_ids)
 {
 	double x_min,x_max,y_min,y_max;
 	double speed_min,speed_max;
@@ -310,6 +312,156 @@ bool draw_Cars_Trace(const std::vector<Trace_Data> &trace_data, std::vector<Car_
 
 }
 
+bool draw_Anim_Trace(const std::vector<Trace_Data> &trace_data,std::vector<Car_Data> &car_data)
+{
+	double min_time_global,max_time_global;
+
+	//get the max time and min time
+	//get each car's life time
+	for(int j=0;j<car_data.size();j++)
+	{	
+		double min_time_local,max_time_local;
+		for(int i=0;i<car_data[j].car_statuses_id_.size();i++)
+		{	
+			double current_time = trace_data[car_data[j].car_statuses_id_[i]].car_status_.time_;
+			if(i==0)
+			{
+				min_time_local = current_time;
+				max_time_local = current_time;
+				continue;
+			}
+			min_time_local = current_time< min_time_local ? current_time : min_time_local;
+			max_time_local = current_time>=max_time_local ? current_time : max_time_local;
+		}
+		car_data[j].active_time_start_ = min_time_local;
+		car_data[j].active_time_end_   = max_time_local;
+		if(j==0)
+		{
+			min_time_global = min_time_local;
+			max_time_global = max_time_global;
+			continue;
+		}
+		min_time_global = min_time_local < min_time_global ?  min_time_local : min_time_global;
+		max_time_global = max_time_local>=max_time_global ? max_time_local : max_time_global;
+	}
+
+
+	std::cout<<min_time_global<<std::endl;
+	std::cout<<max_time_global<<std::endl;
+
+	//get the video frame's size
+	double x_min,x_max,y_min,y_max;
+	double speed_min,speed_max;
+	for(int j=0;j<car_data.size();j++)
+	{
+		int car_id = j;
+		for(int i=0;i<car_data[car_id].car_statuses_id_.size();i++)
+		{
+			cv::Point2d point_temp;
+			point_temp.x = trace_data[car_data[car_id].car_statuses_id_[i]].car_status_.x_;
+			point_temp.y = trace_data[car_data[car_id].car_statuses_id_[i]].car_status_.y_;
+			double speed = trace_data[car_data[car_id].car_statuses_id_[i]].car_status_.speed_;
+
+			//std::cout<<point_temp.x<<"\t"<<point_temp.y<<std::endl;
+
+			if(i==0 && j==0)
+			{
+				x_min = point_temp.x;
+				x_max = point_temp.x;
+				y_min = point_temp.y;
+				y_max = point_temp.y;
+				speed_min = speed;
+				speed_max = speed;
+
+				continue;
+			}
+			x_min = point_temp.x< x_min ? point_temp.x : x_min;
+			x_max = point_temp.x>=x_max ? point_temp.x : x_max;
+			y_min = point_temp.y< y_min ? point_temp.y : y_min;
+			y_max = point_temp.y>=y_max ? point_temp.y : y_max;
+			speed_min = speed< speed_min ? speed : speed_min;
+			speed_max = speed>=speed_max ? speed : speed_max;
+		}
+	}
+
+	//get frame size
+	int x_size = floor((x_max-x_min)+100);
+	int y_size = floor((y_max-y_min)+100);
+
+	//get frame number
+	int frame_count = floor((max_time_global-min_time_global)/1);
+
+	double rate = 25;//视频的帧率  
+    Size videoSize(x_size,y_size);  
+    VideoWriter writer("VideoTest.avi", CV_FOURCC('X', 'V', 'I', 'D'), rate, videoSize);  
+
+	for(int time=0;time<frame_count;time++)
+	{
+		double current_time = (time*1+min_time_global);
+
+		//for each car first check it's active time
+		//then check each point
+		Mat image = Mat(y_size,x_size,CV_8UC3,cv::Scalar(255,255,255));
+
+		for(int j=0;j<car_data.size();j++)
+		{
+			//check time
+			if(car_data[j].active_time_end_<current_time || car_data[j].active_time_start_>current_time)
+			{
+				continue;
+			}
+
+			int car_id = j;
+
+			std::vector<cv::Point2d> points;
+			std::vector<double> speeds;
+
+			for(int i=0;i<car_data[car_id].car_statuses_id_.size();i++)
+			{
+				double point_time = trace_data[car_data[car_id].car_statuses_id_[i]].car_status_.time_;
+				if(point_time>current_time)
+				{
+					continue;
+				}
+
+				cv::Point2d point_temp;
+				point_temp.x = trace_data[car_data[car_id].car_statuses_id_[i]].car_status_.x_- x_min + 50;
+				point_temp.y = trace_data[car_data[car_id].car_statuses_id_[i]].car_status_.y_ - y_min + 50;
+				double speed = trace_data[car_data[car_id].car_statuses_id_[i]].car_status_.speed_;
+				
+				//add point by time
+				points.push_back(point_temp);
+				speeds.push_back(speed);
+
+				//std::cout<<point_temp.x<<"\t"<<point_temp.y<<std::endl;
+			}
+
+			//draw spot
+			for(int i=0;i<points.size();i++)
+			{
+				cv::circle(image,points[i],2,get_Color_By_Speed(speeds[i],speed_min,speed_max),2);  
+			}
+
+			//draw trace
+			for(int i=0;i<points.size()-1;i++)
+			{
+				cv::line(image,points[i],points[i+1], cv::Scalar(0, 0, 0),1);  
+			}
+
+		}
+
+		//imwrite(s+".jpg",image);
+		//add frame
+		writer<<image;
+
+	}
+
+	//save image
+	writer.release();
+
+	return true;
+}
+
 int main(int argc,char *argv[])
 {	
 	if(argc<2)
@@ -330,9 +482,10 @@ int main(int argc,char *argv[])
 	get_Each_Car_Data(trace_data,car_data);
 
 	//draw one car
-	draw_Car_Trace(trace_data,car_data,0);
-	draw_Car_Trace(trace_data,car_data,1);
+	//draw_Car_Trace(trace_data,car_data,0);
+	//draw_Car_Trace(trace_data,car_data,1);
 
+	//draw many cars
 	std::vector<int> cars;
 	cars.push_back(0);
 	cars.push_back(1);
@@ -342,11 +495,10 @@ int main(int argc,char *argv[])
 	cars.push_back(5);
 	cars.push_back(6);
 	cars.push_back(7);
-	draw_Cars_Trace(trace_data,car_data,cars);
-	// draw_Car_Trace(trace_data,car_data,10);
-	// draw_Car_Trace(trace_data,car_data,100);
-	// draw_Car_Trace(trace_data,car_data,200);
-	// draw_Car_Trace(trace_data,car_data,3000);
+	//draw_Cars_Trace(trace_data,car_data,cars);
+
+	//show video, means draw by time
+	draw_Anim_Trace(trace_data,car_data);
 
 	return 0;
 }
