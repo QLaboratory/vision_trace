@@ -466,6 +466,7 @@ int main(int argc,char *argv[])
 {	
 	if(argc<2)
 	{
+		std::cout<<"hello world"<<std::endl;
 		std::cerr<<"Not enough parameter"<<std::endl;
 		return -1;
 	}
