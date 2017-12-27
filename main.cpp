@@ -500,5 +500,5 @@ int main(int argc,char *argv[])
 	//show video, means draw by time
 	draw_Anim_Trace(trace_data,car_data);
 
-	return 0;
+	return 1;
 }
